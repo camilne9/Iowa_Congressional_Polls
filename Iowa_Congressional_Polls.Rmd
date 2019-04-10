@@ -1,0 +1,181 @@
+---
+title: "Iowa Congressional Polls"
+author: "Christopher Milne"
+date: "4/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(gt)
+library(stringr)
+library(janitor)
+library(readr)
+library(lubridate)
+library(knitr)
+
+#This loads the packages needed for all the rest of the code.
+
+ poll <- read.csv("mt_1_elections-poll-ia03-3.csv")
+ 
+#This reads in the data for the tables/graphs from the csv file and stores it as
+#an object for easy use later.
+```
+
+
+
+
+##Voter Response by Party Identification
+```{r response_partyid, echo = FALSE}
+ x <- poll %>% 
+#This means that all of the following manipulations of the stored data will be stored as an object to be called later.
+   mutate(response = recode(response, Rep = "Republican", 
+                            Dem = "Democrat", .default = "Undecided")) %>% 
+#This restricts the options for the response column to only indicate either a Democrat supporter, a Republican supported, or someone "Undecided" (which captures also third party supporters by making the default response option "Undecided"). The response options were also named to be more clear.
+   mutate(response = fct_relevel(response, c("Democrat", "Republican", "Undecided"))) %>% 
+#This relevels the responses so that they will appear in the table in a logical order.
+   mutate(partyid = recode(partyid, Democrat = "Democrat", 
+                           Republican = "Republican", .default = "Other")) %>% 
+#This restricts the options for the partyid column to only indicate either a Democrat, a Republican, or someone who is in neither party (which captures independents and third party members by making the default option "Other"). The response options were also named to be more clear.
+   mutate(partyid = fct_relevel(partyid, c("Democrat", "Republican", "Other"))) %>% 
+#This relevels the partyids so that they will appear in the table in a logical order.
+   group_by(partyid, response) %>% 
+   summarize(number = n()) %>% 
+#These commands group the data by partyid and response and indicate the number of observations that fall into each combination of these variables to provide the information desired for the table.
+   spread(key = partyid, value = number) %>% 
+#This takes the partyid options and spreads them to each be a column. The entries in these column indicate the number of observations falling in the particular combination of partyid and response options.
+   ungroup()
+#This ungroups the data so it will behave as desired in the gt table.
+ 
+ gt(x) %>% 
+#This calls the data from the tibble object created above and makes it into a clean table.
+   tab_header(title = "Voter Response by Party Identification",
+              subtitle ="Iowa's 3rd Congressional Distrinct") %>% 
+#This gives the table a descriptive title and a subtitle indicating where the polling took place.
+   tab_source_note("Source: NYT Upshot / Siena College Poll") %>% 
+#This adds a caption under the table indicating the sourse of the data.
+   tab_spanner(label = "Party Identification", columns = vars("Democrat", 
+                                                              "Republican", "Other")) %>% 
+#Since the categories for response and partyid are similar, this adds a label indicating that the column names show the possibilities for partyid.
+   tab_row_group(group = "Voter Response", rows= everything()) %>% 
+#Similar to the previous command, this adds clarity by adding a label indicating that the rows show the different voter response possibilitites.
+   cols_label(
+     response = "",
+     Democrat = "Democrat",
+     Republican = "Republican",
+     Other = "Other"
+   )
+#This names the columns using clear names that match the names for the different partyid options. The response column name is blank because the "tab_row_group" already effectively provides this label. (Although the "tab_row_group" command could essentially be replaced by naming the response variable column, the "tab_row_group" command was chosen because it seemed to create a more clear table.)
+```
+
+
+
+
+##Average Age of Voters by Poll Response 
+##and Likelihood of their Vote
+```{r likely_response_age, echo = FALSE}
+y <- poll %>% 
+#This means that all of the following manipulations of the stored data will be stored as an object to be called later.
+   select(response, ager, likely) %>% 
+#This isloates the revelvant variables to simplify working with the data set.
+   filter(ager != "[DO NOT READ] Refused") %>% 
+#This removes all respondants for which the age (as shown by the ager variable) is unknown because they are not of interest.
+   filter(response %in% c("Dem", "Rep")) %>% 
+#This isloates reponses supporting the Democrat or the Republican because only these response options are of interest in the question.
+   filter(likely != "[DO NOT READ] Don't know/Refused") %>% 
+#This removes all cases where the likely value is unknown because they are not of interest.
+   mutate(ager = recode(ager, "18 to 34"= "26", "35 to 49" = "42", 
+                             "50 to 64" = "57", "65 and older" = "75")) %>% 
+#This takes the factor of age groups and renames the levels to indicate the midpoint of the interval because we will assume that every individual in the age group is that midpoint age. (The only age group is set to 75 as requested.) The result of this command, however, is still a factor rather than a numeric value that can be used meaningfully with math operations.
+   mutate(likely = fct_relevel(likely, "Already voted", "Almost certain", "Very likely",
+                               "Somewhat likely", "Not very likely", "Not at all likely")) %>% 
+#This reorders the levels of the likely factor so that they appear in a logical order (descending in certainty) is the table.
+   mutate(ager = as.numeric(as.character(ager)))%>% 
+#This takes the ager factor and converts it to a numeric variable. It is necessary to convert it into a character variable first because otherwise the numeric value associated with each factor level will simply be the number of the level, not the number indicated by the characters.
+   group_by(response, likely) %>% 
+#This groups by response and likely so we can observe the number of observations that fall in each combination of these variables.
+   summarize(age = round(sum(ager)/n(), digits =0))%>% 
+#This finds the average age of the people falling in each combination of response and likely by taking the sum of the ages of all the people falling in a given combination and dividing by the number of responses that fall in this combination. This average is rounded to the nearest integerr because, in general, people think of ages in terms of integers.
+  mutate(age = paste(age, "years old", sep = " ")) %>% 
+#This adds units of "years old" to the ages so that the units will appear in the final table to provide clarity of what the numbers mean and how the age variable is represented.
+  spread(key = response, value = age, fill = 0) %>% 
+#This takes the different response possibilities (Dem and Rep) and makes them into columns and the entries of these new columns are the average ages found with the previous command.
+   ungroup()
+#This ungroups the data so it behaves desirably in the gt table.
+   
+gt(y)%>% 
+#This calls the data from the tibble object created above and makes it into a clean table.
+  tab_header(title = "Average Age of Voters by Poll Response and 
+             Likelihood of their Vote",
+             subtitle ="Iowa's 3rd Congressional Distrinct") %>% 
+#This gives the table a descriptive title and a subtitle indicating where the polling took place.
+  tab_source_note("Source: NYT Upshot / Siena College Poll") %>% 
+#This adds a caption under the table indicating the sourse of the data.
+  cols_label(
+    likely = "Likelihood of Vote",
+    Dem = "Democrat",
+    Rep = "Republican"
+  ) %>% 
+#This names the columns the columns using clear and desciptive names so that the table is more easily readable.
+  tab_spanner(label = "Poll Response", columns = vars("Dem", "Rep")) %>% 
+#Since the Dem and Rep columns indicate information drastically different than the likelihood column, this distinction is made clear by indicating the meaning of the Dem and Rep column headers.
+  na_if("0") %>%
+#This indicates that entries that have zero as the average age should be considered NA because they are zero simply because no person fell in this category.
+  fmt_missing(columns = vars(Dem), rows = 5) %>% 
+  fmt_missing(columns =vars(Rep), rows = 6)
+#These commands take the take the entries of the table that have no people corresponding to them and formats them as missing so the table looks cleaner than simply saying NA.
+```
+
+
+
+
+##Race and Education
+```{r race_edu_response, echo = FALSE}
+z <-poll %>% 
+#This means that all of the following manipulations of the stored data will be stored as an object to be called later.
+  filter(race_edu != "[DO NOT READ] Don't know/Refused") %>% 
+#This looks at the variable containing the information desired for the table and removes the respondants for which this variable is unknown.
+  mutate(response = recode(response, Rep = "Republican", 
+                           Dem = "Democrat", Und = "Undecided", .default = "thirdp")) %>% 
+#This command renames the response options to be more clear and assigns all of the third party responses to the same option.
+  mutate(response = fct_relevel(response, c("Democrat", "Republican", "Undecided", "thirdp"))) %>%
+#This reorders the response factor levels so they will appear in a table in the desire order.
+  mutate(race_edu = recode(race_edu, "Nonwhite"="Nonwhite", "White, 4-Year College Grads"="White, college grad", "White, No 4-Year College Degree"="White, not college grad")) %>% 
+#This renames the different option for the race_edu variable so that the names match the names seen on the table we are recreating.
+  group_by(race_edu, response) %>% 
+#This grouping allow us to see all possible combinations of race_edu and response.
+  summarize(weight = sum(final_weight)) %>% 
+#Since the polling weights different people differently, this associates the sum of all the weights of people falling into a particular combination of race_edu and response with this combination.
+  spread(key = response, value = weight, fill = 0) %>% 
+#This takes the different response possibilities and makes them into columns and the entries of these new columns are the weighted sums found with the previous command.
+  mutate(all = Democrat +Republican + Undecided+ thirdp) %>%
+#This command finds the weight of all of the responses in a particular race_edu category by adding up the weights of all the responses falling in each response category.
+  mutate(Democrat = Democrat/all) %>% 
+  mutate(Republican = Republican/all) %>% 
+  mutate(Undecided = Undecided/all) %>% 
+#The three above cammands change the entries for the different response columns from the sum of the weights of the people captured in that combination of variables to the proportion of people in a partiucalr race_edu category falling in that response option.
+  select(-all, -thirdp) %>% 
+#Since the third party respondant are not shown in the model table because "all" was simply a tool for creating the proportions from the sums, these columns are removed.
+  ungroup()
+#This ungroups the data so it behaves as desired in the gt table.
+
+gt(z) %>% 
+#This calls the data from the tibble object created above and makes it into a clean table.
+  tab_header(title = "Race and Education") %>% 
+#This gives the same title as the model table.
+  tab_source_note("Percentages are weighted to resemble likely voters; the number of respondents in each subgroup is unweighted.") %>% 
+  tab_source_note("Undecided voters includes those who refused to answer.") %>% 
+#These add the two footnotes under the table to match the model.
+  cols_label(
+    race_edu = "",
+    Democrat = "DEM.",
+    Republican = "REP.",
+    Undecided = "UND."
+  ) %>% 
+#This names the columns using names that match the names in the model table. (The race_edu column name is also blank to match the model table.)
+  fmt_percent(columns = vars(Democrat, Republican, Undecided), decimals = 0)
+#This converts the proportions in the response columns to percents and rounds them to the nearest integer to match the format of the model table.
+```
+
